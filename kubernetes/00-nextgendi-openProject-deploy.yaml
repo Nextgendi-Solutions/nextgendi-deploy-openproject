@@ -1,0 +1,445 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    openproject.service: cache
+  name: cache
+spec:
+  ports:
+  - name: cache
+    port: 11211
+    protocol: TCP
+    targetPort: 11211
+  selector:
+    openproject.service: cache
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    openproject.service: db
+  name: db
+spec:
+  ports:
+  - name: db
+    port: 5432
+    protocol: TCP
+    targetPort: 5432
+  selector:
+    openproject.service: db
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    openproject.service: proxy
+  name: proxy
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+  selector:
+    openproject.service: proxy
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    openproject.service: web
+  name: web
+spec:
+  ports:
+  - name: web
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    openproject.service: web
+  type: NodePort
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  creationTimestamp: null
+  labels:
+    openproject.service: opdata
+  name: opdata
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+status: {}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  creationTimestamp: null
+  labels:
+    openproject.service: pgdata
+  name: pgdata
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    openproject.service: cache
+  name: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      openproject.service: cache
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        openproject.network/backend: "true"
+        openproject.service: cache
+    spec:
+      containers:
+      - image: memcached
+        name: cache
+        resources: {}
+      restartPolicy: Always
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    openproject.service: cron
+  name: cron
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      openproject.service: cron
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        openproject.network/backend: "true"
+        openproject.service: cron
+    spec:
+      containers:
+      - args:
+        - ./docker/prod/cron
+        env:
+        - name: DATABASE_URL
+          value: postgres://postgres:p4ssw0rd@db/openproject?pool=20&encoding=unicode&reconnect=true
+        - name: IMAP_ENABLED
+          value: "false"
+        - name: OPENPROJECT_CACHE__MEMCACHE__SERVER
+          value: cache:11211
+        - name: OPENPROJECT_RAILS__RELATIVE__URL__ROOT
+        - name: RAILS_CACHE_STORE
+          value: memcache
+        - name: RAILS_MAX_THREADS
+          value: "16"
+        - name: RAILS_MIN_THREADS
+          value: "4"
+        image: openproject/community:12
+        name: cron
+        resources: {}
+        volumeMounts:
+        - mountPath: /var/openproject/assets
+          name: opdata
+      restartPolicy: Always
+      volumes:
+      - name: opdata
+        persistentVolumeClaim:
+          claimName: opdata
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    openproject.service: db
+  name: db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      openproject.service: db
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        openproject.network/backend: "true"
+        openproject.service: db
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_DB
+          value: openproject
+        - name: POSTGRES_PASSWORD
+          value: p4ssw0rd
+        image: postgres:13
+        name: db
+        ports:
+        - containerPort: 5432
+          name: psql
+        resources: {}
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: pgdata
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 3
+      volumes:
+      - name: pgdata
+        persistentVolumeClaim:
+          claimName: pgdata
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    openproject.service: proxy
+  name: proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      openproject.service: proxy
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        openproject.network/frontend: "true"
+        openproject.service: proxy
+    spec:
+      containers:
+      - args:
+        - ./docker/prod/proxy
+        env:
+        - name: APP_HOST
+          value: $(WEB_SERVICE_HOST)
+        - name: OPENPROJECT_RAILS__RELATIVE__URL__ROOT
+        image: openproject/community:12
+        name: proxy
+        ports:
+        - containerPort: 80
+        resources: {}
+      restartPolicy: Always
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    openproject.service: web
+  name: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      openproject.service: web
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        openproject.network/backend: "true"
+        openproject.network/frontend: "true"
+        openproject.service: web
+    spec:
+      containers:
+      - args:
+        - ./docker/prod/web
+        env:
+        - name: DATABASE_URL
+          value: postgres://postgres:p4ssw0rd@$(DB_SERVICE_HOST):$(DB_SERVICE_PORT)/openproject?pool=20&encoding=unicode&reconnect=true
+        - name: IMAP_ENABLED
+          value: "false"
+        - name: OPENPROJECT_HTTPS
+          value: "false"
+        - name: OPENPROJECT_CACHE__MEMCACHE__SERVER
+          value: $(CACHE_SERVICE_HOST):$(CACHE_SERVICE_PORT)
+        - name: OPENPROJECT_RAILS__RELATIVE__URL__ROOT
+        - name: RAILS_CACHE_STORE
+          value: memcache
+        - name: RAILS_MAX_THREADS
+          value: "16"
+        - name: RAILS_MIN_THREADS
+          value: "4"
+        - name: OPENPROJECT_EDITION
+          value: standard
+        image: openproject/community:12
+        livenessProbe:
+          exec:
+            command:
+            - curl
+            - -f
+            - http://localhost:8080/health_checks/default
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+        name: web
+        ports:
+        - containerPort: 8080
+          name: http
+        resources: {}
+        volumeMounts:
+        - mountPath: /var/openproject/assets
+          name: opdata
+      restartPolicy: Always
+      volumes:
+      - name: opdata
+        persistentVolumeClaim:
+          claimName: opdata
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    openproject.service: worker
+  name: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      openproject.service: worker
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        openproject.network/backend: "true"
+        openproject.service: worker
+    spec:
+      containers:
+      - args:
+        - ./docker/prod/worker
+        env:
+        - name: DATABASE_URL
+          value: postgres://postgres:p4ssw0rd@$(DB_SERVICE_HOST):$(DB_SERVICE_PORT)/openproject?pool=20&encoding=unicode&reconnect=true
+        - name: IMAP_ENABLED
+          value: "false"
+        - name: OPENPROJECT_CACHE__MEMCACHE__SERVER
+          value: $(CACHE_SERVICE_HOST):$(CACHE_SERVICE_PORT)
+        - name: OPENPROJECT_RAILS__RELATIVE__URL__ROOT
+        - name: RAILS_CACHE_STORE
+          value: memcache
+        - name: RAILS_MAX_THREADS
+          value: "16"
+        - name: RAILS_MIN_THREADS
+          value: "4"
+        - name: OPENPROJECT_EDITION
+          value: standard
+        image: openproject/community:12
+        name: worker
+        resources: {}
+        volumeMounts:
+        - mountPath: /var/openproject/assets
+          name: opdata
+      restartPolicy: Always
+      volumes:
+      - name: opdata
+        persistentVolumeClaim:
+          claimName: opdata
+status: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: proxy-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: k8s.openproject-dev.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: proxy
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          openproject.network/backend: "true"
+  podSelector:
+    matchLabels:
+      openproject.network/backend: "true"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          openproject.network/frontend: "true"
+  podSelector:
+    matchLabels:
+      openproject.network/frontend: "true"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    openproject.network/backend: "true"
+    openproject.service: seeder
+  name: seeder
+spec:
+  containers:
+  - args:
+    - ./docker/prod/seeder
+    env:
+    - name: DATABASE_URL
+      value: postgres://postgres:p4ssw0rd@$(DB_SERVICE_HOST):$(DB_SERVICE_PORT)/openproject?pool=20&encoding=unicode&reconnect=true
+    - name: IMAP_ENABLED
+      value: "false"
+    - name: OPENPROJECT_CACHE__MEMCACHE__SERVER
+      value: $(CACHE_SERVICE_HOST):$(CACHE_SERVICE_PORT)
+    - name: OPENPROJECT_RAILS__RELATIVE__URL__ROOT
+    - name: RAILS_CACHE_STORE
+      value: memcache
+    - name: RAILS_MAX_THREADS
+      value: "16"
+    - name: RAILS_MIN_THREADS
+      value: "4"
+    - name: OPENPROJECT_EDITION
+      value: standard
+    image: openproject/community:12
+    name: seeder
+    resources: {}
+    volumeMounts:
+    - mountPath: /var/openproject/assets
+      name: opdata
+  restartPolicy: OnFailure
+  volumes:
+  - name: opdata
+    persistentVolumeClaim:
+      claimName: opdata
+status: {}

@@ -28,6 +28,8 @@ spec:
               value: "false"
             - name: OPENPROJECT_HTTPS
               value: "false"              
+            - name: OPENPROJECT_HOST__NAME
+              value: "k8s.openproject-dev.com:80"
             - name: OPENPROJECT_CACHE__MEMCACHE__SERVER
               value: $(CACHE_SERVICE_HOST):$(CACHE_SERVICE_PORT)
             - name: OPENPROJECT_RAILS__RELATIVE__URL__ROOT

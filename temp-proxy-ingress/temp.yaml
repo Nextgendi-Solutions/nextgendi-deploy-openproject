@@ -27,7 +27,7 @@ X		-e OPENPROJECT_SECRET_KEY_BASE=secret \
             - name: OPENPROJECT_HTTPS
               value: "false"
             - name: OPENPROJECT_HOST__NAME
-              value: k8s.openproject-dev.com
+              value: "k8s.openproject-dev.com:80"
             - name: OPENPROJECT_EMAIL__DELIVERY__METHOD                              
               value: "smtp"
             - name: OPENPROJECT_CACHE__MEMCACHE__SERVER
