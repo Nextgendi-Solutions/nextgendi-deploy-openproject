@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - 01-backend-networkpolicy.yaml
+  - 01-frontend-networkpolicy.yaml
+  - 01-opdata-persistentvolumeclaim.yaml
+  - 01-pgdata-persistentvolumeclaim.yaml
+  - 02-cache-deployment.yaml
+  - 02-db-deployment.yaml
+  - 03-cache-service.yaml
+  - 03-db-service.yaml
+  - 04-seeder-pod.yaml
+  - 05-cron-deployment.yaml
+  - 05-web-deployment.yaml
+  - 05-worker-deployment.yaml
+  - 06-web-service.yaml
+  - 07-proxy-deployment.yaml
+  - 08-proxy-service.yaml
+  - 09-proxy-ingress.yaml

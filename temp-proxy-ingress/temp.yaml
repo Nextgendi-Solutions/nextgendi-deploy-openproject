@@ -1,0 +1,43 @@
+docker run -it -d \
+		-p $(WEB_PORT_TO_ACCESS_APP):$(CONTAINER_WEB_PORT) \
+X		-e OPENPROJECT_SECRET_KEY_BASE=secret \
+~    -e IMAP_ENABLED=false \
+~		-e OPENPROJECT_HTTPS=false \
+!    -e OPENPROJECT_HOST__NAME=$(HOST_IP_OR_URL_TO_ACCESS_APP):$(WEB_PORT_TO_ACCESS_APP) \
+~		-e OPENPROJECT_EMAIL__DELIVERY__METHOD=smtp \
+  		-e OPENPROJECT_SMTP__ADDRESS=smtp.gmail.com \
+  		-e OPENPROJECT_SMTP__PORT=587 \
+  		-e OPENPROJECT_SMTP__DOMAIN=smtp.gmail.com  \
+  		-e OPENPROJECT_SMTP__AUTHENTICATION=plain \
+  		-e OPENPROJECT_SMTP__OPENSSL__VERIFY__MODE=none \
+  		-e OPENPROJECT_SMTP__USER__NAME=ishoparavind@gmail.com \
+  		-e OPENPROJECT_SMTP__PASSWORD=cqwxfbqzsprcywuy \
+		-e OPENPROJECT_SMTP__ENABLE__STARTTLS__AUTO=true \
+  		
+		-v $(OPEN_PROJECT_LOCAL_PV_FOLDER)/pgdata:$(OPEN_PROJECT_CONTAINER_PV_FOLDER)/pgdata \
+		-v $(OPEN_PROJECT_LOCAL_PV_FOLDER)/assets:$(OPEN_PROJECT_CONTAINER_PV_FOLDER)/assets \
+		--name $(CUSTOM_OPEN_PROJECT_CONTAINER_NAME) \
+		openproject/community:12.5.0
+
+    env:
+            - name: DATABASE_URL
+              value: postgres://postgres:p4ssw0rd@$(DB_SERVICE_HOST):$(DB_SERVICE_PORT)/openproject?pool=20&encoding=unicode&reconnect=true
+            - name: IMAP_ENABLED
+              value: "false"
+            - name: OPENPROJECT_HTTPS
+              value: "false"
+            - name: OPENPROJECT_HOST__NAME
+              value: k8s.openproject-dev.com
+            - name: OPENPROJECT_EMAIL__DELIVERY__METHOD                              
+              value: "smtp"
+            - name: OPENPROJECT_CACHE__MEMCACHE__SERVER
+              value: $(CACHE_SERVICE_HOST):$(CACHE_SERVICE_PORT)
+            - name: OPENPROJECT_RAILS__RELATIVE__URL__ROOT
+            - name: RAILS_CACHE_STORE
+              value: memcache
+            - name: RAILS_MAX_THREADS
+              value: "16"
+            - name: RAILS_MIN_THREADS
+              value: "4"
+            - name: OPENPROJECT_EDITION
+              value: standard
